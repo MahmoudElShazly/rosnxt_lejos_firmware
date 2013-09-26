@@ -8,7 +8,7 @@ From [ROS.org](http://www.ros.org/wiki/): ROS (Robot Operating System) provides 
 rosnxt_lejos_firmware
 =====================
 
-rosnxt_lejos_firmware is the counterpart of rosnxt_proxy, consisting of a program running on the NXT brick, on top of the leJOS NXT firmware, containing the control logic, the device drivers, and the protocol implementation for communicating with the rosnxt_proxy ROS node.
+rosnxt_lejos_firmware is the counterpart of [rosnxt_proxy](https://github.com/rosnxt/rosnxt_proxy/), consisting of a program running on the NXT brick, on top of the leJOS NXT firmware, containing the control logic, the device drivers, and the protocol implementation for communicating with the rosnxt_proxy ROS node.
 
 The aim of rosnxt_lejos_firmware is to support nearly every sensor available, so it has been designed to be easy to extend with new devices.
 
