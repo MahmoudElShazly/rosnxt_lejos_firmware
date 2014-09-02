@@ -33,13 +33,24 @@ package com.github.rosnxt.firmware;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.util.Queue;
+
+import com.github.rosnxt.firmware.devices.Color;
+import com.github.rosnxt.firmware.devices.DCompass;
+import com.github.rosnxt.firmware.devices.DIMU;
+import com.github.rosnxt.firmware.devices.IRLink;
+import com.github.rosnxt.firmware.devices.Light;
+import com.github.rosnxt.firmware.devices.Motor;
+import com.github.rosnxt.firmware.devices.MuxTouch;
+import com.github.rosnxt.firmware.devices.Sound;
+import com.github.rosnxt.firmware.devices.Touch;
+import com.github.rosnxt.firmware.devices.Ultrasonic;
 
 import lejos.nxt.Button;
 import lejos.nxt.LCD;
 import lejos.nxt.comm.NXTConnection;
 import lejos.nxt.comm.Bluetooth;
 import lejos.nxt.comm.USB;
+import static com.github.rosnxt.firmware.ProtocolConstants.*;
 
 /**
  * Main class for the ROS-NXT leJOS firmware
@@ -48,46 +59,37 @@ import lejos.nxt.comm.USB;
  *
  */
 public class ROS {
-	boolean run = true;
+	boolean run;
 
 	Device device[] = new Device[8];
+	
+	NXTConnection connection;
 	
 	DataInputStream inputStream;
 	DataOutputStream outputStream;
 
-	public void main() throws IOException {
-		mainLoop:
-		while(true) {
-			boolean bt = false;
-			
-			LCD.clear();
-			LCD.drawString(" <  BT", 0, 1);
-			LCD.drawString("    USB  >", 0, 2);
-			switch(Button.waitForAnyPress()) {
-			case Button.ID_LEFT: bt = true; break;
-			case Button.ID_RIGHT: bt = false; break;
-			default: continue mainLoop;
-			}
-			LCD.clear();
-			
-			System.out.println("waiting " + (bt ? "bluetooth" : "usb"));
-			NXTConnection conn = (bt ? Bluetooth.waitForConnection() : USB.waitForConnection());
-			
-			System.out.println("connected");
-			
-			DataInputStream inputStream = conn.openDataInputStream();
-			DataOutputStream outputStream = conn.openDataOutputStream();
-			
-			run = true;
-			
+	public ROS(boolean bluetooth) {
+		System.out.println("waiting " + (bluetooth ? "bluetooth" : "usb"));
+		connection = (bluetooth ? Bluetooth.waitForConnection() : USB.waitForConnection());
+		System.out.println("connected");
+
+		run = true;
+		
+		inputStream = connection.openDataInputStream();
+		outputStream = connection.openDataOutputStream();
+	}
+	
+	public void run() throws IOException {
+		try {
 			while(run) {
 				processCommands();
 				pollDevices();
 			}
-			
+		} catch(IOException ex) {
+		} finally {
 			inputStream.close();
 			outputStream.close();
-			conn.close();
+			connection.close();
 		}
 	}
 	
@@ -97,21 +99,112 @@ public class ROS {
 		if(h == null)
 			return;
 		
-		for(int port = 0; port < device.length; port++) {
-			if(device[port].matchHeader(h)) {
-				// TODO: automatically ensure that no payload remains
-				//       unread after command execution (protocol compliance)
-				device[port].executeCommand(h, inputStream);
+		if(h.device == DEV_SYSTEM) {
+			byte t = -1; int z = -1;
+			switch(h.type) {
+			case CMD_SYSTEM_SET_DEVICE_TYPE:
+				t = inputStream.readByte();
+				switch(t) {
+				case DEV_NULL:
+					if(isMotorPort(h.port) || isSensorPort(h.port))
+						device[h.port] = null;
+					break;
+				case DEV_MOTOR:
+					if(isMotorPort(h.port))
+						device[h.port] = new Motor(h.port);
+					break;
+				case DEV_TOUCH:
+					if(isSensorPort(h.port))
+						device[h.port] = new Touch(h.port);
+					break;
+				case DEV_SOUND:
+					if(isSensorPort(h.port))
+						device[h.port] = new Sound(h.port);
+					break;
+				case DEV_LIGHT:
+					if(isSensorPort(h.port))
+						device[h.port] = new Light(h.port);
+					break;
+				case DEV_COLOR:
+					if(isSensorPort(h.port))
+						device[h.port] = new Color(h.port);
+					break;
+				case DEV_ULTRASONIC:
+					if(isSensorPort(h.port))
+						device[h.port] = new Ultrasonic(h.port);
+					break;
+				case DEV_TOUCHMUX:
+					if(isSensorPort(h.port))
+						device[h.port] = new MuxTouch(h.port);
+					break;
+				case DEV_IRLINK:
+					if(isSensorPort(h.port))
+						device[h.port] = new IRLink(h.port);
+					break;
+				case DEV_DIMU:
+					if(isSensorPort(h.port))
+						device[h.port] = new DIMU(h.port);
+					break;
+				case DEV_DCOMPASS:
+					if(isSensorPort(h.port))
+						device[h.port] = new DCompass(h.port);
+					break;
+				}
 				break;
+			case CMD_SYSTEM_SET_POLL_PERIOD:
+				t = inputStream.readByte();
+				z = inputStream.readInt();
+				if(device[h.port] != null)
+					device[h.port].pollingMachines[t].setPollPeriod(z);
+				break;
+			}
+		} else {
+			for(int port = 0; port < device.length; port++) {
+				if(device[port] == null) continue;
+				
+				if(device[port].matchHeader(h)) {
+					// TODO: automatically ensure that no payload remains
+					//       unread after command execution (protocol compliance)
+					device[port].executeCommand(h, inputStream);
+					break;
+				}
 			}
 		}
 	}
 	
+	boolean isMotorPort(byte port) {
+		return port == PORT_A || port == PORT_B || port == PORT_C;
+	}
+	
+	boolean isSensorPort(byte port) {
+		return port == PORT_S1 || port == PORT_S2 || port == PORT_S3 || port == PORT_S4;
+	}
+	
 	void pollDevices() throws IOException {
 		for(int i = 0; i < device.length; i++) {
+			if(device[i] == null) continue;
+			
 			device[i].poll(outputStream);
 		}
 	}
 
-	public static void main(String[] args) throws Exception {new ROS().main();}
+	public static void main(String[] args) throws Exception {
+		boolean bt = false;
+		
+		selectConnectionMethod:
+		while(true) {
+			LCD.clear();
+			LCD.drawString(" <  BT", 0, 1);
+			LCD.drawString("    USB  >", 0, 2);
+			switch(Button.waitForAnyPress()) {
+			case Button.ID_LEFT: bt = true; break selectConnectionMethod;
+			case Button.ID_RIGHT: bt = false; break selectConnectionMethod;
+			}
+		}
+		
+		LCD.clear();
+		
+		ROS app = new ROS(bt);
+		app.run();
+	}
 }

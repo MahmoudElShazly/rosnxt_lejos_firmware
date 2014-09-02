@@ -1,7 +1,7 @@
 package com.github.rosnxt.firmware;
 
 public class ProtocolConstants {
-	public static final byte DEV_DUMMY =        0;
+	public static final byte DEV_NULL =         0;
 	public static final byte DEV_DIAGNOSTICS =  1;
 	public static final byte DEV_MOTOR =        2;
 	public static final byte DEV_TOUCH =        3;
@@ -13,6 +13,7 @@ public class ProtocolConstants {
 	public static final byte DEV_IRLINK =       9;
 	public static final byte DEV_DIMU =        10;
 	public static final byte DEV_DCOMPASS =    11;
+	public static final byte DEV_SYSTEM =     127;
 	
 	public static final byte PORT_INTERNAL = 0;
 	public static final byte PORT_S1 =       1; 
@@ -22,6 +23,9 @@ public class ProtocolConstants {
 	public static final byte PORT_A =        5;
 	public static final byte PORT_B =        6;
 	public static final byte PORT_C =        7;
+	
+	public static final byte CMD_SYSTEM_SET_DEVICE_TYPE = 0;
+	public static final byte CMD_SYSTEM_SET_POLL_PERIOD = 1;
 	
 	public static final byte CMD_MOTOR_ROTATE_BY = 0;
 	public static final byte CMD_MOTOR_ROTATE_TO = 1;

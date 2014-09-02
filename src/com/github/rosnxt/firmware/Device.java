@@ -3,8 +3,6 @@ package com.github.rosnxt.firmware;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
 
 import lejos.nxt.Motor;
 import lejos.nxt.NXTRegulatedMotor;
