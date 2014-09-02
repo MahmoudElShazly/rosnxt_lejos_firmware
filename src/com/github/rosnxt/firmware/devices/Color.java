@@ -30,9 +30,11 @@
 
 package com.github.rosnxt.firmware.devices;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
+
 import lejos.nxt.ColorSensor;
 
-import com.github.rosnxt.firmware.Data;
 import com.github.rosnxt.firmware.Device;
 
 import static com.github.rosnxt.firmware.ProtocolConstants.*;
@@ -47,31 +49,34 @@ public class Color extends Device {
 	private ColorSensor sensor;
 	
 	public Color(byte port) {
-		super(port, TYPE_COLOR);
-		sensor = new ColorSensor(sensor(port));
-	}
-
-	@Override
-	protected int getNumSlots() {
-		return 3;
-	}
-	
-	@Override
-	public Data getData0() {
-		return new Data(new int[]{sensor.getLightValue()});
-	}
-	
-	@Override
-	public Data getData1() {
-		return new Data(new int[]{sensor.getColorID()});
-	}
-	
-	@Override
-	public Data getData2() {
-		return new Data(new int[]{
-				sensor.getColor().getRed(),
-				sensor.getColor().getGreen(),
-				sensor.getColor().getBlue()}
-		);
+		super(DEV_COLOR, port, new PollingMachine[3]);
+		sensor = new ColorSensor(getSensorPort(port));
+		pollingMachines[0] = new PollingMachine() {
+			@Override
+			public void poll(DataOutputStream outputStream) throws IOException {
+				header(DATA_COLOR_LEVEL, Integer.SIZE / Byte.SIZE).writeToStream(outputStream);
+				outputStream.writeInt(sensor.getLightValue());
+				outputStream.flush();
+			}
+		};
+		pollingMachines[1] = new PollingMachine() {
+			@Override
+			public void poll(DataOutputStream outputStream) throws IOException {
+				header(DATA_COLOR_ID, Integer.SIZE / Byte.SIZE).writeToStream(outputStream);
+				outputStream.writeInt(sensor.getColorID());
+				outputStream.flush();
+			}
+		};
+		pollingMachines[2] = new PollingMachine() {
+			@Override
+			public void poll(DataOutputStream outputStream) throws IOException {
+				header(DATA_COLOR_RGB, 3).writeToStream(outputStream);
+				ColorSensor.Color color = sensor.getColor();
+				outputStream.writeByte(color.getRed());
+				outputStream.writeByte(color.getGreen());
+				outputStream.writeByte(color.getBlue());
+				outputStream.flush();
+			}
+		};
 	}
 }

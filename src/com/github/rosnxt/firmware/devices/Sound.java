@@ -30,9 +30,11 @@
 
 package com.github.rosnxt.firmware.devices;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
+
 import lejos.nxt.SoundSensor;
 
-import com.github.rosnxt.firmware.Data;
 import com.github.rosnxt.firmware.Device;
 
 import static com.github.rosnxt.firmware.ProtocolConstants.*;
@@ -47,17 +49,15 @@ public class Sound extends Device {
 	SoundSensor sensor;
 	
 	public Sound(byte port) {
-		super(port, TYPE_SOUND);
-		sensor = new SoundSensor(sensor(port), true);
-	}
-
-	@Override
-	protected int getNumSlots() {
-		return 1;
-	}
-	
-	@Override
-	public Data getData0() {
-		return new Data(new int[]{sensor.readValue()});
+		super(DEV_SOUND, port, new PollingMachine[1]);
+		sensor = new SoundSensor(getSensorPort(port), true);
+		pollingMachines[0] = new PollingMachine() {
+			@Override
+			public void poll(DataOutputStream outputStream) throws IOException {
+				header(DATA_SOUND_LEVEL, Integer.SIZE / Byte.SIZE).writeToStream(outputStream);
+				outputStream.writeInt(sensor.readValue());
+				outputStream.flush();
+			}
+		};
 	}
 }

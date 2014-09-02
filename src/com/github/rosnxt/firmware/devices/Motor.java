@@ -30,10 +30,14 @@
 
 package com.github.rosnxt.firmware.devices;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+
 import lejos.robotics.RegulatedMotor;
 
-import com.github.rosnxt.firmware.Data;
 import com.github.rosnxt.firmware.Device;
+import com.github.rosnxt.firmware.Header;
 
 import static com.github.rosnxt.firmware.ProtocolConstants.*;
 
@@ -47,49 +51,59 @@ public class Motor extends Device {
 	RegulatedMotor motor;
 	
 	public Motor(byte port) {
-		super(port, TYPE_MOTOR);
-		this.motor = motor(port);
+		super(DEV_MOTOR, port, new PollingMachine[1]);
+		this.motor = getMotorPort(port);
+		pollingMachines[0] = new PollingMachine() {
+			@Override
+			public void poll(DataOutputStream outputStream) throws IOException {
+				header(DATA_MOTOR_TACHO, Integer.SIZE / Byte.SIZE).writeToStream(outputStream);
+				outputStream.writeInt(motor.getTachoCount());
+				outputStream.flush();
+			}
+		};
 	}
 	
 	@Override
-	public void write(Data data) {
-		int v[] = data.intValues;
-		if(v.length >= 2 && (v[0] == MOTOR_ROTATE_BY || v[0] == MOTOR_ROTATE_TO)) {
-			if(v.length >= 3) motor.setSpeed(v[2]);
-			if(v.length >= 4) motor.setAcceleration(v[3]);
-			if(v[0] == MOTOR_ROTATE_BY) motor.rotate(v[1], true);
-			else motor.rotateTo(v[1], true);
-		} else if(v.length == 1 && v[0] == MOTOR_FLOAT) {
+	public void executeCommand(Header header, DataInputStream inputStream) throws IOException {
+		int bytesConsumed = 0;
+		byte dir; int angle;
+		switch(header.type) {
+		case CMD_MOTOR_ROTATE:
+			dir = inputStream.readByte();
+			bytesConsumed += 1;
+			if(dir > 0) motor.forward();
+			else if(dir < 0) motor.backward();
+			else motor.flt(true);
+			break;
+		case CMD_MOTOR_ROTATE_BY:
+			angle = inputStream.readInt();
+			bytesConsumed += Integer.SIZE / Byte.SIZE;
+			motor.rotate(angle, true);
+			break;
+		case CMD_MOTOR_ROTATE_TO:
+			angle = inputStream.readInt();
+			bytesConsumed += Integer.SIZE / Byte.SIZE;
+			motor.rotateTo(angle, true);
+			break;
+		case CMD_MOTOR_FLT:
 			motor.flt(true);
-		} else if(v.length == 1 && v[0] == MOTOR_STOP) {
+			break;
+		case CMD_MOTOR_STOP:
 			motor.stop(true);
-		} else if(v.length == 2 && v[0] == MOTOR_SET_SPEED) {
-			motor.setSpeed(Math.abs(v[1]));
-		} else if(v.length == 2 && v[0] == MOTOR_SET_ACCEL) {
-			motor.setAcceleration(Math.abs(v[1]));
-		} else if(v.length == 3 && v[0] == MOTOR_SET_STALL_TRESHOLD) {
-			motor.setStallThreshold(v[1], v[2]);
-		} else if(v.length == 1 && v[0] == MOTOR_FORWARD) {
-			motor.forward();
-		} else if(v.length == 1 && v[0] == MOTOR_BACKWARD) {
-			motor.backward();
+			break;
+		case CMD_MOTOR_SET_SPEED:
+			motor.setSpeed(Math.abs(inputStream.readInt()));
+			bytesConsumed += Integer.SIZE / Byte.SIZE;
+			break;
+		case CMD_MOTOR_SET_ACCEL:
+			motor.setAcceleration(Math.abs(inputStream.readInt()));
+			bytesConsumed += Integer.SIZE / Byte.SIZE;
+			break;
+		case CMD_MOTOR_SET_STALL_THRESHOLD:
+			motor.setStallThreshold(inputStream.readInt(), inputStream.readInt());
+			bytesConsumed += 2 * (Integer.SIZE / Byte.SIZE);
+			break;
 		}
-	}
-	
-	@Override
-	protected int getNumSlots() {
-		return 1;
-	}
-	
-	@Override
-	public Data getData0() {
-		return new Data(new int[]{
-			motor.isMoving() ? 1 : 0,
-			motor.isStalled() ? 1 : 0,
-			motor.getTachoCount(),
-			0,//motor.getSpeed(),
-			0,//motor.getRotationSpeed(),
-			0//motor.getLimitAngle()
-		});
+		super.executeCommand(header, inputStream, bytesConsumed);
 	}
 }

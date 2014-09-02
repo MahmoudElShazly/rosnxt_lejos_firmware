@@ -30,10 +30,12 @@
 
 package com.github.rosnxt.firmware.devices;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
+
 import lejos.nxt.Battery;
 import lejos.nxt.Button;
 
-import com.github.rosnxt.firmware.Data;
 import com.github.rosnxt.firmware.Device;
 
 import static com.github.rosnxt.firmware.ProtocolConstants.*;
@@ -45,36 +47,55 @@ import static com.github.rosnxt.firmware.ProtocolConstants.*;
  *
  */
 public class Diagnostics extends Device {
-	public Diagnostics() {
-		super(PORT_MISC, TYPE_DIAGNOSTICS);
-	}
-
-	@Override
-	protected int getNumSlots() {
-		return 3;
-	}
-	
-	@Override
-	public Data getData0() {
-		return new Data(new int[]{
-			Battery.getVoltageMilliVolt()
-		});
-	}
-	
-	@Override
-	public Data getData1() {
-		return new Data(new int[]{
-			(int)System.getRuntime().freeMemory(),
-		});
-	}
-	
-	@Override
-	public Data getData2() {
-		return new Data(new int[]{
-			Button.ENTER.isDown()  ? 1 : 0,
-			Button.ESCAPE.isDown() ? 1 : 0,
-			Button.LEFT.isDown()   ? 1 : 0,
-			Button.RIGHT.isDown()  ? 1 : 0
-		});
+	public Diagnostics(byte port) {
+		super(DEV_DIAGNOSTICS, port, new PollingMachine[6]);
+		pollingMachines[0] = new PollingMachine() {
+			@Override
+			public void poll(DataOutputStream outputStream) throws IOException {
+				header(DATA_DIAGNOSTICS_BATTERY_LEVEL, Integer.SIZE / Byte.SIZE).writeToStream(outputStream);
+				outputStream.writeInt(Battery.getVoltageMilliVolt());
+				outputStream.flush();
+			}
+		};
+		pollingMachines[1] = new PollingMachine() {
+			@Override
+			public void poll(DataOutputStream outputStream) throws IOException {
+				header(DATA_DIAGNOSTICS_FREEMEMORY, Integer.SIZE / Byte.SIZE).writeToStream(outputStream);
+				outputStream.writeInt((int)System.getRuntime().freeMemory());
+				outputStream.flush();
+			}
+		};
+		pollingMachines[2] = new PollingMachine() {
+			@Override
+			public void poll(DataOutputStream outputStream) throws IOException {
+				header(DATA_DIAGNOSTICS_BTN_ENTER, 1).writeToStream(outputStream);
+				outputStream.writeBoolean(Button.ENTER.isDown());
+				outputStream.flush();
+			}
+		};
+		pollingMachines[3] = new PollingMachine() {
+			@Override
+			public void poll(DataOutputStream outputStream) throws IOException {
+				header(DATA_DIAGNOSTICS_BTN_ESCAPE, 1).writeToStream(outputStream);
+				outputStream.writeBoolean(Button.ESCAPE.isDown());
+				outputStream.flush();
+			}
+		};
+		pollingMachines[4] = new PollingMachine() {
+			@Override
+			public void poll(DataOutputStream outputStream) throws IOException {
+				header(DATA_DIAGNOSTICS_BTN_LEFT, 1).writeToStream(outputStream);
+				outputStream.writeBoolean(Button.LEFT.isDown());
+				outputStream.flush();
+			}
+		};
+		pollingMachines[5] = new PollingMachine() {
+			@Override
+			public void poll(DataOutputStream outputStream) throws IOException {
+				header(DATA_DIAGNOSTICS_BTN_RIGHT, 1).writeToStream(outputStream);
+				outputStream.writeBoolean(Button.RIGHT.isDown());
+				outputStream.flush();
+			}
+		};
 	}
 }

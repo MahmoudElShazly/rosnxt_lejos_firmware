@@ -30,9 +30,11 @@
 
 package com.github.rosnxt.firmware.devices;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
+
 import lejos.nxt.UltrasonicSensor;
 
-import com.github.rosnxt.firmware.Data;
 import com.github.rosnxt.firmware.Device;
 
 import static com.github.rosnxt.firmware.ProtocolConstants.*;
@@ -47,17 +49,15 @@ public class Ultrasonic extends Device {
 	private UltrasonicSensor sensor;
 	
 	public Ultrasonic(byte port) {
-		super(port, TYPE_ULTRASONIC);
-		sensor = new UltrasonicSensor(sensor(port));
-	}
-	
-	@Override
-	protected int getNumSlots() {
-		return 1;
-	}
-	
-	@Override
-	public Data getData0() {
-		return new Data(new int[]{sensor.getDistance()});
+		super(DEV_ULTRASONIC, port, new PollingMachine[1]);
+		sensor = new UltrasonicSensor(getSensorPort(port));
+		pollingMachines[0] = new PollingMachine() {
+			@Override
+			public void poll(DataOutputStream outputStream) throws IOException {
+				header(DATA_ULTRASONIC_DISTANCE, Integer.SIZE / Byte.SIZE).writeToStream(outputStream);
+				outputStream.writeInt(sensor.getDistance());
+				outputStream.flush();
+			}
+		};
 	}
 }

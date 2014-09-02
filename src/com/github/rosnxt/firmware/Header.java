@@ -30,30 +30,48 @@
 
 package com.github.rosnxt.firmware;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+
 /**
+ * Chunk/command header used in sensor protocol and in command protocol
+ * 
+ * The header is of fixed length (4 bytes). After reading the header, we can
+ * read or skip its payload.
+ * An incomplete/malformed header can cause the program to hang due to blocking
+ * in a read() with no available data on the stream.
  * 
  * @author Federico Ferri
  *
  */
-public class Data {
-	public byte port;
-	public byte slot;
-	public byte type;
-	public int intValues[];
-	public float floatValues[];
+public class Header {
+	public final byte device;
+	public final byte port;
+	public final byte type;
+	public final byte length;
+	
+	public final static int BYTESIZE = 4;
 
-	public Data(int intValues[]) {
-		this(intValues, new float[]{});
+	public Header(byte device, byte port, byte type, byte length) {
+		this.device = device;
+		this.port = port;
+		this.type = type;
+		this.length = length;
 	}
 	
-	public Data(float floatValues[]) {
-		this(new int[]{}, floatValues);
+	public static Header readFromStream(DataInputStream stream) throws IOException {
+		return new Header(stream.readByte(), stream.readByte(), stream.readByte(), stream.readByte());
 	}
 	
-	public Data(int intValues[], float floatValues[]) {
-		if(intValues == null || floatValues == null)
-			throw new NullPointerException();
-		this.intValues = intValues;
-		this.floatValues = floatValues;
+	public static Header readFromStreamAsync(DataInputStream stream) throws IOException {
+		return stream.available() >= 4 ? readFromStream(stream) : null;
+	}
+	
+	public void writeToStream(DataOutputStream stream) throws IOException {
+		stream.writeByte(device);
+		stream.writeByte(port);
+		stream.writeByte(type);
+		stream.writeByte(length);
 	}
 }

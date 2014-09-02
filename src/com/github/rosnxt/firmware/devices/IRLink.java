@@ -30,8 +30,11 @@
 
 package com.github.rosnxt.firmware.devices;
 
-import com.github.rosnxt.firmware.Data;
+import java.io.DataInputStream;
+import java.io.IOException;
+
 import com.github.rosnxt.firmware.Device;
+import com.github.rosnxt.firmware.Header;
 import com.github.rosnxt.firmware.drivers.IRLinkExt;
 
 import static com.github.rosnxt.firmware.ProtocolConstants.*;
@@ -46,28 +49,49 @@ public class IRLink extends Device {
 	private IRLinkExt sensor;
 
 	public IRLink(byte port) {
-		super(port, TYPE_IRLINK);
-		sensor = new IRLinkExt(sensor(port));
+		super(DEV_IRLINK, port, new PollingMachine[0]);
+		sensor = new IRLinkExt(getSensorPort(port));
 	}
 
 	@Override
-	public void write(Data data) {
-		int v[] = data.intValues;
-		if(v.length == 4 && v[0] == IRLINK_COMBO_DIRECT) {
-			sensor.sendPFComboDirect(v[1], v[2], v[3]);
-		} else if(v.length == 4 && v[0] == IRLINK_COMBO_PWM) {
-			sensor.sendPFComboPmw(v[1], v[2], v[3]);
-		} else if(v.length == 3 && v[0] == IRLINK_EXTENDED) {
-			sensor.sendPFExtended(v[1], v[2]);
-		} else if(v.length == 4 && v[0] == IRLINK_SINGLE_CST) {
-			sensor.sendPFSingleModeCST(v[1], v[2], v[3]);
-		} else if(v.length == 4 && v[0] == IRLINK_SINGLE_PWM) {
-			sensor.sendPFSingleModePWM(v[1], v[2], v[3]);
+	public void executeCommand(Header header, DataInputStream inputStream) throws IOException {
+		int bytesConsumed = 0, a, b, c;
+		switch(header.type) {
+		case CMD_IRLINK_SEND_EXTENDED:
+			a = inputStream.readInt();
+			b = inputStream.readInt();
+			bytesConsumed += 2 * Integer.SIZE / Byte.SIZE;
+			sensor.sendPFExtended(a, b);
+			break;
+		case CMD_IRLINK_SEND_SINGLE_CST:
+			a = inputStream.readInt();
+			b = inputStream.readInt();
+			c = inputStream.readInt();
+			bytesConsumed += 3 * Integer.SIZE / Byte.SIZE;
+			sensor.sendPFSingleModeCST(a, b, c);
+			break;
+		case CMD_IRLINK_SEND_SINGLE_PWM:
+			a = inputStream.readInt();
+			b = inputStream.readInt();
+			c = inputStream.readInt();
+			bytesConsumed += 3 * Integer.SIZE / Byte.SIZE;
+			sensor.sendPFSingleModePWM(a, b, c);
+			break;
+		case CMD_IRLINK_SEND_COMBO_DIRECT:
+			a = inputStream.readInt();
+			b = inputStream.readInt();
+			c = inputStream.readInt();
+			bytesConsumed += 3 * Integer.SIZE / Byte.SIZE;
+			sensor.sendPFComboDirect(a, b, c);
+			break;
+		case CMD_IRLINK_SEND_COMBO_PWM:
+			a = inputStream.readInt();
+			b = inputStream.readInt();
+			c = inputStream.readInt();
+			bytesConsumed += 3 * Integer.SIZE / Byte.SIZE;
+			sensor.sendPFComboPmw(a, b, c);
+			break;
 		}
-	}
-	
-	@Override
-	protected int getNumSlots() {
-		return 0;
+		super.executeCommand(header, inputStream, bytesConsumed);
 	}
 }

@@ -30,7 +30,9 @@
 
 package com.github.rosnxt.firmware.devices;
 
-import com.github.rosnxt.firmware.Data;
+import java.io.DataOutputStream;
+import java.io.IOException;
+
 import com.github.rosnxt.firmware.Device;
 import com.github.rosnxt.firmware.drivers.TouchMuxHT;
 
@@ -46,17 +48,19 @@ public class MuxTouch extends Device {
 	private TouchMuxHT sensor;
 	
 	public MuxTouch(byte port) {
-		super(port, TYPE_MUXTOUCH);
-		sensor = new TouchMuxHT(sensor(port));
-	}
-
-	@Override
-	protected int getNumSlots() {
-		return 1;
-	}
-	
-	@Override
-	public Data getData0() {
-		return new Data(sensor.readSensor());
+		super(DEV_TOUCHMUX, port, new PollingMachine[1]);
+		sensor = new TouchMuxHT(getSensorPort(port));
+		pollingMachines[0] = new PollingMachine() {
+			@Override
+			public void poll(DataOutputStream outputStream) throws IOException {
+				header(DATA_TOUCHMUX_STATUS, 1).writeToStream(outputStream);
+				int d[] = sensor.readSensor();
+				outputStream.writeBoolean(d[0] > 0);
+				outputStream.writeBoolean(d[1] > 0);
+				outputStream.writeBoolean(d[2] > 0);
+				outputStream.writeBoolean(d[3] > 0);
+				outputStream.flush();
+			}
+		};
 	}
 }

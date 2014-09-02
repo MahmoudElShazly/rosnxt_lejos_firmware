@@ -30,7 +30,9 @@
 
 package com.github.rosnxt.firmware.devices;
 
-import com.github.rosnxt.firmware.Data;
+import java.io.DataOutputStream;
+import java.io.IOException;
+
 import com.github.rosnxt.firmware.Device;
 import com.github.rosnxt.firmware.drivers.HMC5883L;
 
@@ -45,18 +47,16 @@ import static com.github.rosnxt.firmware.ProtocolConstants.*;
 public class DCompass extends Device {
 	private HMC5883L sensor;
 	
-	public DCompass(byte sensorPort) {
-		super(sensorPort, TYPE_COMPASS);
-		sensor = new HMC5883L(sensor(sensorPort));
-	}
-
-	@Override
-	protected int getNumSlots() {
-		return 1;
-	}
-	
-	@Override
-	public Data getData0() {
-		return new Data(new float[]{sensor.getDegreesCartesian()});
+	public DCompass(byte port) {
+		super(DEV_DCOMPASS, port, new PollingMachine[1]);
+		sensor = new HMC5883L(getSensorPort(port));
+		pollingMachines[0] = new PollingMachine() {
+			@Override
+			public void poll(DataOutputStream outputStream) throws IOException {
+				header(DATA_DCOMPASS_HEADING, Float.SIZE / Byte.SIZE).writeToStream(outputStream);
+				outputStream.writeFloat(sensor.getDegreesCartesian());
+				outputStream.flush();
+			}
+		};
 	}
 }
