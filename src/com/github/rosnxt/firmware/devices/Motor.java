@@ -70,6 +70,7 @@ public class Motor extends Device {
 		switch(header.type) {
 		case CMD_MOTOR_ROTATE:
 			dir = inputStream.readByte();
+			System.out.println("rotate " + dir);
 			bytesConsumed += 1;
 			if(dir > 0) motor.forward();
 			else if(dir < 0) motor.backward();
@@ -77,29 +78,36 @@ public class Motor extends Device {
 			break;
 		case CMD_MOTOR_ROTATE_BY:
 			angle = inputStream.readInt();
+			System.out.println("rotateBy " + angle);
 			bytesConsumed += Integer.SIZE / Byte.SIZE;
 			motor.rotate(angle, true);
 			break;
 		case CMD_MOTOR_ROTATE_TO:
 			angle = inputStream.readInt();
+			System.out.println("rotateTo " + angle);
 			bytesConsumed += Integer.SIZE / Byte.SIZE;
 			motor.rotateTo(angle, true);
 			break;
 		case CMD_MOTOR_FLT:
+			System.out.println("flt");
 			motor.flt(true);
 			break;
 		case CMD_MOTOR_STOP:
+			System.out.println("stop");
 			motor.stop(true);
 			break;
 		case CMD_MOTOR_SET_SPEED:
+			System.out.println("setSpeed " + "#");
 			motor.setSpeed(Math.abs(inputStream.readInt()));
 			bytesConsumed += Integer.SIZE / Byte.SIZE;
 			break;
 		case CMD_MOTOR_SET_ACCEL:
+			System.out.println("setAccel " + "#");
 			motor.setAcceleration(Math.abs(inputStream.readInt()));
 			bytesConsumed += Integer.SIZE / Byte.SIZE;
 			break;
 		case CMD_MOTOR_SET_STALL_THRESHOLD:
+			System.out.println("setStallTh " + "# #");
 			motor.setStallThreshold(inputStream.readInt(), inputStream.readInt());
 			bytesConsumed += 2 * (Integer.SIZE / Byte.SIZE);
 			break;

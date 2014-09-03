@@ -34,17 +34,6 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 
-import com.github.rosnxt.firmware.devices.Color;
-import com.github.rosnxt.firmware.devices.DCompass;
-import com.github.rosnxt.firmware.devices.DIMU;
-import com.github.rosnxt.firmware.devices.IRLink;
-import com.github.rosnxt.firmware.devices.Light;
-import com.github.rosnxt.firmware.devices.Motor;
-import com.github.rosnxt.firmware.devices.MuxTouch;
-import com.github.rosnxt.firmware.devices.Sound;
-import com.github.rosnxt.firmware.devices.Touch;
-import com.github.rosnxt.firmware.devices.Ultrasonic;
-
 import lejos.nxt.Button;
 import lejos.nxt.LCD;
 import lejos.nxt.comm.NXTConnection;
@@ -69,7 +58,7 @@ public class ROS {
 	DataOutputStream outputStream;
 
 	public ROS(boolean bluetooth) {
-		System.out.println("waiting " + (bluetooth ? "bluetooth" : "usb"));
+		System.out.println("waiting " + (bluetooth ? "bt" : "usb") + "...");
 		connection = (bluetooth ? Bluetooth.waitForConnection() : USB.waitForConnection());
 		System.out.println("connected");
 
@@ -99,66 +88,34 @@ public class ROS {
 		if(h == null)
 			return;
 		
+		System.out.println("h " + h.device + " " + h.port + " " + h.type + " " + h.length);
+		
 		if(h.device == DEV_SYSTEM) {
 			byte t = -1; int z = -1;
+			int bytesConsumed = 0;
 			switch(h.type) {
 			case CMD_SYSTEM_SET_DEVICE_TYPE:
 				t = inputStream.readByte();
-				switch(t) {
-				case DEV_NULL:
-					if(isMotorPort(h.port) || isSensorPort(h.port))
-						device[h.port] = null;
-					break;
-				case DEV_MOTOR:
-					if(isMotorPort(h.port))
-						device[h.port] = new Motor(h.port);
-					break;
-				case DEV_TOUCH:
-					if(isSensorPort(h.port))
-						device[h.port] = new Touch(h.port);
-					break;
-				case DEV_SOUND:
-					if(isSensorPort(h.port))
-						device[h.port] = new Sound(h.port);
-					break;
-				case DEV_LIGHT:
-					if(isSensorPort(h.port))
-						device[h.port] = new Light(h.port);
-					break;
-				case DEV_COLOR:
-					if(isSensorPort(h.port))
-						device[h.port] = new Color(h.port);
-					break;
-				case DEV_ULTRASONIC:
-					if(isSensorPort(h.port))
-						device[h.port] = new Ultrasonic(h.port);
-					break;
-				case DEV_TOUCHMUX:
-					if(isSensorPort(h.port))
-						device[h.port] = new MuxTouch(h.port);
-					break;
-				case DEV_IRLINK:
-					if(isSensorPort(h.port))
-						device[h.port] = new IRLink(h.port);
-					break;
-				case DEV_DIMU:
-					if(isSensorPort(h.port))
-						device[h.port] = new DIMU(h.port);
-					break;
-				case DEV_DCOMPASS:
-					if(isSensorPort(h.port))
-						device[h.port] = new DCompass(h.port);
-					break;
-				}
+				System.out.println("setDevType " + t);
+				bytesConsumed += 1;
+				setDeviceType(h.port, t);
 				break;
 			case CMD_SYSTEM_SET_POLL_PERIOD:
 				t = inputStream.readByte();
 				z = inputStream.readInt();
-				if(device[h.port] != null)
-					device[h.port].pollingMachines[t].setPollPeriod(z);
+				System.out.println("setPollT " + t + " " + z);
+				bytesConsumed += 1 + Integer.SIZE/Byte.SIZE;
+				setPollPeriod(h.port, t, z);
+				break;
+			default:
+				System.out.println("bad command");
 				break;
 			}
+			for(int i = bytesConsumed; i < h.length; i++)
+				inputStream.readByte();
 		} else {
+			boolean handled = false;
+			
 			for(int port = 0; port < device.length; port++) {
 				if(device[port] == null) continue;
 				
@@ -166,8 +123,15 @@ public class ROS {
 					// TODO: automatically ensure that no payload remains
 					//       unread after command execution (protocol compliance)
 					device[port].executeCommand(h, inputStream);
+					handled = true;
 					break;
 				}
+			}
+			
+			if(!handled) {
+				System.out.println("unhandled");
+				for(int i = 0; i < h.length; i++)
+					inputStream.readByte();
 			}
 		}
 	}
@@ -186,6 +150,15 @@ public class ROS {
 			
 			device[i].poll(outputStream);
 		}
+	}
+	
+	public void setDeviceType(byte port, byte deviceType) {
+		device[port] = Device.factory(deviceType, port);
+	}
+	
+	public void setPollPeriod(byte port, byte subport, int period) {
+		if(device[port] != null)
+			device[port].pollingMachines[subport].setPollPeriod(period);
 	}
 
 	public static void main(String[] args) throws Exception {

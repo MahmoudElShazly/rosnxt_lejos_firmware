@@ -4,9 +4,8 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 
-import lejos.nxt.Motor;
-import lejos.nxt.NXTRegulatedMotor;
-import lejos.nxt.SensorPort;
+import com.github.rosnxt.firmware.devices.*;
+
 import static com.github.rosnxt.firmware.ProtocolConstants.*;
 
 public abstract class Device {
@@ -55,21 +54,21 @@ public abstract class Device {
 		return new Header(device, port, type, (byte)length);
 	}
 	
-	protected static SensorPort getSensorPort(byte port) {
+	protected static lejos.nxt.SensorPort getSensorPort(byte port) {
 		switch(port) {
-		case PORT_S1: return SensorPort.S1;
-		case PORT_S2: return SensorPort.S2;
-		case PORT_S3: return SensorPort.S3;
-		case PORT_S4: return SensorPort.S4;
+		case PORT_S1: return lejos.nxt.SensorPort.S1;
+		case PORT_S2: return lejos.nxt.SensorPort.S2;
+		case PORT_S3: return lejos.nxt.SensorPort.S3;
+		case PORT_S4: return lejos.nxt.SensorPort.S4;
 		default:      return null;
 		}
 	}
 	
-	protected static NXTRegulatedMotor getMotorPort(byte port) {
+	protected static lejos.nxt.NXTRegulatedMotor getMotorPort(byte port) {
 		switch(port) {
-		case PORT_A: return Motor.A;
-		case PORT_B: return Motor.B;
-		case PORT_C: return Motor.C;
+		case PORT_A: return lejos.nxt.Motor.A;
+		case PORT_B: return lejos.nxt.Motor.B;
+		case PORT_C: return lejos.nxt.Motor.C;
 		default:     return null;
 		}
 	}
@@ -87,5 +86,22 @@ public abstract class Device {
 	public void executeCommand(Header header, DataInputStream inputStream, int numBytesAlreadyConsumed) throws IOException {
 		for(int i = numBytesAlreadyConsumed; i < header.length; i++)
 			inputStream.readByte();
+	}
+	
+	public static Device factory(byte deviceType, byte port) {
+		switch(deviceType) {
+		case DEV_NULL: return null;
+		case DEV_MOTOR: return new Motor(port);
+		case DEV_TOUCH: return new Touch(port);
+		case DEV_SOUND: return new Sound(port);
+		case DEV_LIGHT: return new Light(port);
+		case DEV_COLOR: return new Color(port);
+		case DEV_ULTRASONIC: return new Ultrasonic(port);
+		case DEV_TOUCHMUX: return new MuxTouch(port);
+		case DEV_IRLINK: return new IRLink(port);
+		case DEV_DIMU: return new DIMU(port);
+		case DEV_DCOMPASS: return new DCompass(port);
+		}
+		return null;
 	}
 }
