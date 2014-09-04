@@ -71,7 +71,7 @@ public class DIMU extends Device {
 		pollingMachines[1] = new PollingMachine() {
 			@Override
 			public void poll(DataOutputStream outputStream) throws IOException {
-				header(DATA_DIMU_ACCEL, 3 * Float.SIZE / Byte.SIZE).writeToStream(outputStream);
+				header(DATA_DIMU_GYRO, 3 * Float.SIZE / Byte.SIZE).writeToStream(outputStream);
 				outputStream.writeFloat(gyro.getAxis(DIMUGyro.Axis.X).getAngularVelocity());
 				outputStream.writeFloat(gyro.getAxis(DIMUGyro.Axis.Y).getAngularVelocity());
 				outputStream.writeFloat(gyro.getAxis(DIMUGyro.Axis.Z).getAngularVelocity());
