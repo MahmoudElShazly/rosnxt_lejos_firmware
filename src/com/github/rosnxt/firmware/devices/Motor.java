@@ -56,8 +56,10 @@ public class Motor extends Device {
 		pollingMachines[0] = new PollingMachine() {
 			@Override
 			public void poll(DataOutputStream outputStream) throws IOException {
-				header(DATA_MOTOR_TACHO, Integer.SIZE / Byte.SIZE).writeToStream(outputStream);
+				header(DATA_MOTOR_STATUS, 2 + Integer.SIZE / Byte.SIZE).writeToStream(outputStream);
 				outputStream.writeInt(motor.getTachoCount());
+				outputStream.writeBoolean(motor.isMoving());
+				outputStream.writeBoolean(motor.isStalled());
 				outputStream.flush();
 			}
 		};

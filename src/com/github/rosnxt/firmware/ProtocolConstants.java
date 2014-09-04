@@ -50,7 +50,7 @@ public class ProtocolConstants {
 	public static final byte DATA_DIAGNOSTICS_BTN_LEFT = 4;
 	public static final byte DATA_DIAGNOSTICS_BTN_RIGHT = 5;
 	
-	public static final byte DATA_MOTOR_TACHO = 0;
+	public static final byte DATA_MOTOR_STATUS = 0;
 	
 	public static final byte DATA_TOUCH_STATUS = 0;
 	
