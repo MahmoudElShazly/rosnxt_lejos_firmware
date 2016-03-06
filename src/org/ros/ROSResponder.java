@@ -1,0 +1,435 @@
+package org.ros;
+
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.util.ArrayList;
+
+import lejos.geom.Point;
+import lejos.nxt.Battery;
+import lejos.nxt.ColorSensor;
+import lejos.nxt.LightSensor;
+import lejos.nxt.Motor;
+import lejos.nxt.NXTRegulatedMotor;
+import lejos.nxt.SensorPort;
+import lejos.nxt.Sound;
+import lejos.nxt.SoundSensor;
+import lejos.nxt.TouchSensor;
+import lejos.nxt.UltrasonicSensor;
+import lejos.nxt.addon.AccelMindSensor;
+import lejos.nxt.addon.CompassHTSensor;
+import lejos.nxt.addon.GyroSensor;
+import lejos.nxt.comm.NXTConnection;
+import lejos.nxt.comm.Bluetooth;
+import lejos.nxt.comm.USB;
+import lejos.robotics.RegulatedMotor;
+import lejos.robotics.localization.OdometryPoseProvider;
+import lejos.robotics.navigation.DifferentialPilot;
+import lejos.robotics.navigation.Pose;
+
+public class ROSResponder {
+	private static boolean blueTooth = true;
+	
+	private static RegulatedMotor leftMotor;
+	private static RegulatedMotor rightMotor;
+	
+	private static DifferentialPilot robot;
+	private static OdometryPoseProvider posep;
+	
+	private static float linearVelocity = 0;
+	private static float angularVelocity = 0;
+	
+	private static final byte SONIC = 0;
+	private static final byte COMPASS = 1;
+	private static final byte GYRO = 2;
+	private static final byte ACCEL = 3;
+	private static final byte TOUCH = 4;
+	private static final byte SOUND = 5;
+	private static final byte LIGHT = 6;
+	private static final byte COLOR = 7;
+	private static final byte MOTOR_A = 8;
+	private static final byte MOTOR_B = 9;
+	private static final byte MOTOR_C = 10;
+	private static final byte TWIST = 11;
+	private static final byte CONFIGURE_SENSOR = 12;
+	private static final byte CONFIGURE_MOTOR = 13;
+	private static final byte BASE = 14;
+	private static final byte FORWARD = 15;
+	private static final byte BACKWARD = 16;
+	private static final byte ROTATE_LEFT = 17;
+	private static final byte ROTATE_RIGHT = 18;
+	private static final byte TRAVEL = 19;
+	private static final byte ROTATE = 20;
+	private static final byte SET_TRAVEL_SPEED = 21;
+	private static final byte SET_ROTATE_SPEED = 22;
+	private static final byte STOP = 23;
+	private static final byte SHUT_DOWN = 24;
+	private static final byte SET_POSE = 25;
+	private static final byte CONFIGURE_PILOT = 26;
+	private static final byte PLAY_TONE = 27;
+	private static final byte LASER = 28;
+	private static final byte CALIBRATE_COMPASS = 29;
+	private static final byte CALIBRATE_GYRO = 30;
+	private static final byte IMU = 31;
+	private static final byte BATTERY = 32;
+	private static final byte GOTO = 33;
+	
+	private static DataInputStream dis;
+	private static DataOutputStream dos;
+	
+	private static ArrayList<SensorReader> sensorReaders = new ArrayList<SensorReader>();
+	private static ArrayList<MotorReader> motorReaders = new ArrayList<MotorReader>();
+	
+	private static float trackWidth, wheelDiameter;
+	private static boolean reverse;
+	
+	private static float compassZero = 0, gyroZero = 0;
+	private static SensorReader compassReader;
+	
+	public static void main(String[] args) {
+		
+		// Wait for a connection from the proxy
+		NXTConnection conn = ((blueTooth)
+				? Bluetooth.waitForConnection()
+		        : USB.waitForConnection());
+		
+	    dis = conn.openDataInputStream();
+		dos = conn.openDataOutputStream();
+		
+		// Start the responder
+		Responder r = new Responder();
+		Thread t = new Thread(r);
+		t.start();
+		
+		// Publish requested data continuously
+		while(true) {
+			try {
+				// Send configured sensor readings
+				synchronized(sensorReaders) {
+					for(SensorReader sr: sensorReaders) {
+						dos.writeByte(sr.getType());
+						dos.writeFloat(sr.getReading());
+					}
+				}
+				// Send configured motor readings
+				synchronized(motorReaders) {
+					for(MotorReader mr: motorReaders) {
+						dos.writeByte(mr.getType());
+						dos.writeInt(mr.getReading());
+					}
+				}
+				// Always send the battery reading
+				dos.writeByte(BATTERY);
+				dos.writeFloat(Battery.getVoltage());
+				// Send the pose and velocities if a pilot is configured
+				if (posep != null) {
+					dos.writeByte(BASE);
+					Pose p = posep.getPose();
+					dos.writeFloat(p.getX());
+					dos.writeFloat(p.getY());
+					dos.writeFloat(p.getHeading());
+					dos.writeFloat(linearVelocity);
+					dos.writeFloat(angularVelocity);
+				}
+				dos.flush();
+			} catch (IOException e) {
+				System.exit(1);
+			}
+		}
+	}
+	
+	/*
+	 * There is one instance of this thread for each configured sensor. It gets the latest reading for
+	 * the sensor as fast as possible.
+	 */
+	static class SensorReader implements Runnable {
+		private float reading;
+		private byte type;
+		private UltrasonicSensor sonic;
+		private CompassHTSensor compass;
+		private GyroSensor gyro;
+		private AccelMindSensor accel;
+		private TouchSensor touch;
+		private SoundSensor sound;
+		private ColorSensor color;
+		private LightSensor light;
+		
+		private boolean set = false;
+		
+		public void setTypeAndPort(byte type, SensorPort port) {
+			this.type = type;
+			set=true;
+			
+			if (type == SONIC) {
+				sonic = new UltrasonicSensor(port);
+			} else if (type == COMPASS) {
+				compass = new CompassHTSensor(port);
+			} else if (type == GYRO) {
+				gyro = new GyroSensor(port);
+				gyro.recalibrateOffset();
+			} else if (type == ACCEL) {
+				accel = new AccelMindSensor(port);
+			} else if (type == TOUCH) {
+				touch = new TouchSensor(port);
+			} else if (type == COLOR) {
+				color = new ColorSensor(port);
+			} else if (type == LIGHT) {
+				light = new LightSensor(port);
+			} else if (type == SOUND) {
+				sound = new SoundSensor(port);
+			}
+		}
+		
+		public float getReading() {
+			return reading;
+		}
+		
+		public byte getType() {
+			return type;
+		}
+		
+		public void run() {
+			while(true) {
+				if (set) {
+					switch (type) {
+					case SONIC:
+						reading = sonic.getRange();
+						break;					
+					case COMPASS:
+						reading = (compass.getDegrees() - compassZero) % 360;
+						break;
+					case GYRO:
+						reading = gyro.getAngularVelocity();
+						break;
+					case ACCEL:
+						reading = accel.getXAccel();
+						break;
+					case SOUND:
+						reading = sound.readValue();
+						break;
+					case LIGHT:
+						reading = light.getLightValue();
+						break;
+					case COLOR:
+						reading = color.getLightValue();
+						break;
+					case TOUCH:
+						reading = (touch.isPressed() ? 1 : 0);
+						break;
+					}
+				}
+				Thread.yield();
+			}			
+		}	
+	}
+	
+	/*
+	 * There is one instance of this thread for each configured motor.
+	 * It currently publishes just the tacho count.
+	 */
+	static class MotorReader implements Runnable {
+		private int reading;
+		private NXTRegulatedMotor motor;
+		private byte type;
+		private boolean set = false;
+		
+		public void setMotor(byte type, NXTRegulatedMotor motor) {
+			this.motor = motor;
+			this.type = type;
+			set=true;
+		}
+		
+		public byte getType() {
+			return type;
+		}
+		
+		public int getReading() {
+			return reading;
+		}
+		
+		public void run() {
+			while(true) {
+				if (set) {
+					reading = motor.getTachoCount();
+				}
+				Thread.yield();
+			}			
+		}	
+	}
+	
+	/*
+	 * The communications responder. Deals with configuration requests and pilot commands,
+	 * including the TWIST command which drives the robot using linear and angular velocities.
+	 */
+	static class Responder implements Runnable {
+		public void run() {
+			while (true) {
+				try {
+					byte type = dis.readByte();
+					switch (type) {
+					case TWIST:
+						float linear = dis.readFloat();
+						float angular = dis.readFloat();
+						
+						angularVelocity = angular;
+						linearVelocity = linear;
+						
+						if (angular == 0 && linear != 0) { // Straight line
+							robot.setTravelSpeed(Math.abs(linear * 100));
+							boolean forward = (linear > 0);
+							if (forward) robot.forward();
+							else robot.backward();
+						} else if (linear != 0) { // Arc
+							boolean forward = (linear > 0);
+							float radius = (linear/angular) * 100;
+							// Increase speed so center of the robot goes at the linear speed
+							robot.setTravelSpeed(Math.abs(linear * 100) * ((radius + (trackWidth/2)) / radius));
+							if (forward) {
+								robot.arcForward(radius);
+							} else {
+								robot.arcBackward(radius);
+							}
+						} else if (angular != 0) { // Rotate
+							boolean left = (angular > 0);
+							robot.setRotateSpeed(Math.abs(Math.toDegrees(angular)));
+							if (left) robot.rotateLeft();
+							else robot.rotateRight();
+						} else if (linear == 0 && angular == 0) {
+							robot.stop();
+						}
+						
+						break;
+					case CONFIGURE_SENSOR:
+						byte sType = dis.readByte();
+						byte portId = dis.readByte();
+						SensorReader sr = new SensorReader();
+						if (sType == COMPASS) compassReader = sr; 
+						SensorPort port = SensorPort.getInstance(portId);
+						sr.setTypeAndPort(sType, port);
+						synchronized(sensorReaders) {
+							sensorReaders.add(sr);
+						}
+						Thread t = new Thread(sr);
+						t.start();
+						break;
+					case CONFIGURE_MOTOR:
+						byte mType = dis.readByte();
+						MotorReader mr = new MotorReader();
+						NXTRegulatedMotor motor = Motor.getInstance(mType - MOTOR_A);
+						mr.setMotor(mType, motor);
+						synchronized(motorReaders) {
+							motorReaders.add(mr);
+						}
+						Thread tm = new Thread(mr);
+						tm.start();
+						break;
+					case FORWARD:
+						linearVelocity = (float) (robot.getTravelSpeed() / 100);
+						angularVelocity = 0;
+						robot.forward();
+						linearVelocity = 0;
+					case BACKWARD:
+						linearVelocity = (float) (robot.getTravelSpeed() / 100);
+						angularVelocity = 0;
+						robot.backward();
+						linearVelocity = 0;
+						break;
+					case ROTATE_LEFT:
+						angularVelocity = (float) Math.toRadians(robot.getRotateSpeed()); 
+						linearVelocity = 0;
+						robot.rotateLeft();
+						angularVelocity = 0;
+						break;
+					case ROTATE_RIGHT:
+						angularVelocity = (float) Math.toRadians(robot.getRotateSpeed()); 
+						linearVelocity = 0;
+						robot.rotateRight();
+						angularVelocity = 0;
+						break;
+					case TRAVEL:
+						linearVelocity = (float) (robot.getTravelSpeed() / 100);
+						angularVelocity = 0;
+						float distance = dis.readFloat();
+						robot.travel(distance);
+						linearVelocity = 0;
+						break;
+					case ROTATE:
+						angularVelocity = (float) Math.toRadians(robot.getRotateSpeed()); 
+						linearVelocity = 0;
+						float angle = dis.readFloat();
+						robot.rotate(angle);
+						angularVelocity = 0;
+						break;
+					case SET_TRAVEL_SPEED:
+						float speed = dis.readFloat();
+						robot.setTravelSpeed(speed);
+						break;
+					case SET_ROTATE_SPEED:
+						float rotateSpeed = dis.readFloat();
+						robot.setRotateSpeed(rotateSpeed);
+						break;
+					case STOP:
+						linearVelocity = 0;
+						angularVelocity = 0;
+						robot.stop();
+						break;
+					case SHUT_DOWN:
+						System.exit(0);
+					case SET_POSE:
+						float x = dis.readFloat();
+						float y = dis.readFloat();
+						float heading = dis.readFloat();
+						posep.setPose(new Pose(x,y,heading));
+						break;
+					case CONFIGURE_PILOT:
+						byte leftMotorId = dis.readByte();
+						byte rightMotorId = dis.readByte();
+						wheelDiameter = dis.readFloat();
+						trackWidth = dis.readFloat();
+						reverse = dis.readBoolean();
+						leftMotor = Motor.getInstance(leftMotorId);
+						rightMotor = Motor.getInstance(rightMotorId);
+				    	robot = new DifferentialPilot(wheelDiameter,trackWidth,leftMotor,rightMotor,reverse);
+				    	posep = new OdometryPoseProvider(robot);
+				    	break;
+					case PLAY_TONE:
+						float freq = dis.readShort();
+						float duration = dis.readShort();
+						Sound.playTone((int) freq, (int) duration);
+					case CALIBRATE_COMPASS:
+						if (posep != null && compassReader != null) {
+							Pose p = posep.getPose();
+							compassZero = 0;
+							compassZero = (compassReader.getReading() - p.getHeading());
+						}
+						break;
+					case GOTO:
+						x = dis.readFloat();
+						y = dis.readFloat();
+						heading = dis.readFloat();
+						
+						Point dest = new Point(x,y);
+						Pose pose = posep.getPose();
+						
+						angularVelocity = (float) Math.toRadians(robot.getRotateSpeed()); 
+						linearVelocity = 0;
+						robot.rotate(pose.relativeBearing(dest));
+						
+						angularVelocity = 0;
+						linearVelocity = (float) (robot.getTravelSpeed() / 100);			
+						robot.travel(pose.distanceTo(dest));
+						
+						linearVelocity = 0;
+						angularVelocity = (float) Math.toRadians(robot.getRotateSpeed());
+						robot.rotate(heading - posep.getPose().getHeading());
+						angularVelocity = 0;
+						
+						break;
+					}
+				} catch (IOException e) {
+					System.exit(1);
+				}				
+			}
+		}		
+	}
+}
